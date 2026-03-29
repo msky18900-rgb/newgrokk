@@ -9,21 +9,18 @@ from googleapiclient.http import MediaFileUpload
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
-# ==================== MONKEY PATCH FOR PYROGRAM BUG ====================
+# ==================== MONKEY PATCH ====================
 import pyrogram.utils
 def patched_get_peer_type(peer_id: int):
     if isinstance(peer_id, int):
-        if peer_id > 0:
-            return "user"
-        elif str(peer_id).startswith("-100"):
-            return "channel"
-        else:
-            return "group"
+        if peer_id > 0: return "user"
+        elif str(peer_id).startswith("-100"): return "channel"
+        else: return "group"
     raise ValueError(f"Peer id invalid: {peer_id}")
 pyrogram.utils.get_peer_type = patched_get_peer_type
-# =====================================================================
+# ======================================================
 
-# ==================== HARDCODED CONFIG ====================
+# ==================== CONFIG ====================
 API_ID = 38861262
 API_HASH = "607df10d59071e60acb73a9db7993111"
 SESSION_STRING = "BQJQ-c4AvpHZC130VQPQCjJsihgzTHOHstjZWokF7ZrUn2bNG7aveLhykusaxKHor0cg2ErxENHJAVT0RDUSDN8h1eHk7np8zoEyTLcX9V1ldsT0fp6apm4hZDtMbCY1-68Jcw-ZsKrVYsXiZpXKzyasQRY4eKTfkwzbNt3q8ea5Kl0mUJ39zLD_rtVkkEJIXFw4rWZBt_J0LCi86dU6wRv1ApfyfpOM_d06qGZpRchm6w-XrQp8MVBwcPt8x75mJ0jCdR5xv8IujPWGz-eGbOC0sVpVMqIVT3w-O1YEtG38okfLYKyBoD-BBkLSLHqf9RrTx-7vWQMAnLAWSwpbnrNhqQQ3twAAAAHt3wQlAA"
@@ -41,10 +38,8 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 app = Client("my_userbot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
-# Global YouTube client + pending auth flows
 youtube = None
 pending_flows = {}
-
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 async def load_or_auth_youtube():
@@ -60,65 +55,54 @@ async def load_or_auth_youtube():
     youtube = build("youtube", "v3", credentials=creds)
     return True
 
-# ===================== SUPER DEBUG HANDLER (catches EVERY message) =====================
-@app.on_message(filters.private)
+# ===================== MAIN DEBUG HANDLER (works in Saved Messages) =====================
+@app.on_message(filters.user(BOT_OWNER_ID))
 async def debug_all_messages(client, message: Message):
-    if message.from_user.id != BOT_OWNER_ID:
-        return
     text = message.text or message.caption or "NO TEXT"
     file_name = message.document.file_name if message.document else "NO FILE"
-    print(f"🟢 DEBUG: Received → File: {file_name} | Text: {text}")
+    print(f"🟢 HANDLER TRIGGERED → File: {file_name} | Text: {text}")
     await message.reply(
         f"✅ **Bot received your message!**\n\n"
         f"📄 File: `{file_name}`\n"
         f"💬 Text: `{text}`\n\n"
-        f"Send `/youtube_auth` now!"
+        f"Try sending `/youtube_auth` now!"
     )
 
 # ===================== JSON FILE SAVER =====================
-@app.on_message(filters.document & filters.private)
+@app.on_message(filters.document & filters.user(BOT_OWNER_ID))
 async def handle_client_secrets(client, message: Message):
-    if message.from_user.id != BOT_OWNER_ID:
-        return
     filename = (message.document.file_name or "").lower()
-    print(f"📥 Document received: {filename}")
+    print(f"📥 JSON received: {filename}")
     if filename.endswith(".json"):
-        file_path = f"{DATA_DIR}/client_secrets.json"
-        await message.download(file_path)
+        await message.download(f"{DATA_DIR}/client_secrets.json")
         await message.reply("✅ `client_secrets.json` SAVED!\n\nNow send `/youtube_auth`")
     else:
         await message.reply(f"❌ Not a JSON file. Received: `{filename}`")
 
 # ===================== COMMANDS =====================
-@app.on_message(filters.command(["start", "ping"]))
+@app.on_message(filters.command(["ping", "start"]) & filters.user(BOT_OWNER_ID))
 async def ping_command(client, message: Message):
-    if message.from_user.id != BOT_OWNER_ID:
-        return
-    await message.reply("🏓 **Bot is 100% alive!**\nSend your JSON file or /youtube_auth")
+    await message.reply("🏓 **Bot is alive and responding!**\nSend your client_secrets.json or /youtube_auth")
 
-@app.on_message(filters.command("queue"))
+@app.on_message(filters.command("queue") & filters.user(BOT_OWNER_ID))
 async def show_queue(client, message):
     await message.reply(f"**Queue size:** {video_queue.qsize()}")
 
-@app.on_message(filters.command("youtube_auth"))
+@app.on_message(filters.command("youtube_auth") & filters.user(BOT_OWNER_ID))
 async def youtube_auth_command(client, message: Message):
-    if message.from_user.id != BOT_OWNER_ID:
-        return
-    status_msg = await message.reply("🔄 Checking...")
+    status_msg = await message.reply("🔄 Checking YouTube auth...")
     if await load_or_auth_youtube():
         await status_msg.edit("✅ Already authenticated!")
     else:
         await start_youtube_auth(status_msg)
 
-@app.on_message(filters.command("code"))
+@app.on_message(filters.command("code") & filters.user(BOT_OWNER_ID))
 async def handle_auth_code(client, message: Message):
-    if message.from_user.id != BOT_OWNER_ID:
-        return
     code = message.text.split(maxsplit=1)[-1].strip()
     status_msg = await message.reply("🔄 Processing code...")
     await process_auth_code(code, status_msg)
 
-# ===================== QUEUE & UPLOAD FUNCTIONS =====================
+# ===================== QUEUE & UPLOAD (full feature) =====================
 video_queue = asyncio.Queue()
 processing_lock = asyncio.Lock()
 
@@ -206,7 +190,7 @@ async def main():
     await app.start()
     await load_or_auth_youtube()
     asyncio.create_task(process_queue())
-    print("🚀 DEBUG BOT STARTED — listening to EVERY message in Saved Messages")
+    print("🚀 BOT STARTED SUCCESSFULLY — now listening in Saved Messages")
     await idle()
 
 if __name__ == "__main__":
