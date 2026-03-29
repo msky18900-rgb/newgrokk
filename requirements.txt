@@ -2,4 +2,4 @@ pyrogram
 tgcrypto
 google-api-python-client
 google-auth-oauthlib
-aiohttp
+google-auth
