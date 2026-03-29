@@ -2,7 +2,7 @@ import asyncio
 import os
 import pickle
 import time
-from pyrogram import Client, filters
+from pyrogram import Client, filters, idle
 from pyrogram.types import Message
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -128,7 +128,7 @@ async def process_queue():
         finally:
             video_queue.task_done()
 
-# ===================== NEW BYPASS HANDLER =====================
+# ===================== BYPASS FOR CLIENT_SECRETS.JSON =====================
 @app.on_message(filters.document & filters.private)
 async def handle_client_secrets(client, message: Message):
     if message.from_user.id != BOT_OWNER_ID:
@@ -140,7 +140,7 @@ async def handle_client_secrets(client, message: Message):
     else:
         await message.reply("📄 I only accept `client_secrets.json` for YouTube setup.")
 
-# ===================== ORIGINAL HANDLERS =====================
+# ===================== COMMANDS =====================
 @app.on_message(filters.video & filters.private)
 async def handle_video(client: Client, message: Message):
     if message.from_user.id != BOT_OWNER_ID:
@@ -170,11 +170,13 @@ async def handle_auth_code(client, message: Message):
     status_msg = await message.reply("🔄 Processing code...")
     await process_auth_code(code, status_msg)
 
-@app.on_start()
-async def start_bot(client):
+# ===================== CORRECT STARTUP =====================
+async def main():
+    await app.start()
     await load_or_auth_youtube()
     asyncio.create_task(process_queue())
     print("🚀 Userbot started with queue + auto client_secrets bypass!")
+    await idle()
 
 if __name__ == "__main__":
-    app.run()
+    asyncio.run(main())
