@@ -9,7 +9,24 @@ from googleapiclient.http import MediaFileUpload
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
-# ==================== HARDCODED CONFIG ====================
+# ==================== MONKEY PATCH FOR PYROGRAM BUG ====================
+# Fixes "Peer id invalid" error permanently
+import pyrogram.utils
+
+def patched_get_peer_type(peer_id: int):
+    if isinstance(peer_id, int):
+        if peer_id > 0:
+            return "user"
+        elif str(peer_id).startswith("-100"):
+            return "channel"
+        else:
+            return "group"
+    raise ValueError(f"Peer id invalid: {peer_id}")
+
+pyrogram.utils.get_peer_type = patched_get_peer_type
+# =====================================================================
+
+# ==================== NEW HARDCODED CONFIG ====================
 API_ID = 38861262
 API_HASH = "607df10d59071e60acb73a9db7993111"
 SESSION_STRING = "BQJQ-c4AvpHZC130VQPQCjJsihgzTHOHstjZWokF7ZrUn2bNG7aveLhykusaxKHor0cg2ErxENHJAVT0RDUSDN8h1eHk7np8zoEyTLcX9V1ldsT0fp6apm4hZDtMbCY1-68Jcw-ZsKrVYsXiZpXKzyasQRY4eKTfkwzbNt3q8ea5Kl0mUJ39zLD_rtVkkEJIXFw4rWZBt_J0LCi86dU6wRv1ApfyfpOM_d06qGZpRchm6w-XrQp8MVBwcPt8x75mJ0jCdR5xv8IujPWGz-eGbOC0sVpVMqIVT3w-O1YEtG38okfLYKyBoD-BBkLSLHqf9RrTx-7vWQMAnLAWSwpbnrNhqQQ3twAAAAHt3wQlAA"
@@ -170,12 +187,12 @@ async def handle_auth_code(client, message: Message):
     status_msg = await message.reply("🔄 Processing code...")
     await process_auth_code(code, status_msg)
 
-# ===================== CORRECT STARTUP =====================
+# ===================== START =====================
 async def main():
     await app.start()
     await load_or_auth_youtube()
     asyncio.create_task(process_queue())
-    print("🚀 Userbot started with queue + auto client_secrets bypass!")
+    print("🚀 Userbot started with NEW credentials + peer fix!")
     await idle()
 
 if __name__ == "__main__":
