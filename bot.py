@@ -10,9 +10,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
 # ==================== MONKEY PATCH FOR PYROGRAM BUG ====================
-# Fixes "Peer id invalid" error permanently
 import pyrogram.utils
-
 def patched_get_peer_type(peer_id: int):
     if isinstance(peer_id, int):
         if peer_id > 0:
@@ -22,11 +20,10 @@ def patched_get_peer_type(peer_id: int):
         else:
             return "group"
     raise ValueError(f"Peer id invalid: {peer_id}")
-
 pyrogram.utils.get_peer_type = patched_get_peer_type
 # =====================================================================
 
-# ==================== NEW HARDCODED CONFIG ====================
+# ==================== HARDCODED CONFIG ====================
 API_ID = 38861262
 API_HASH = "607df10d59071e60acb73a9db7993111"
 SESSION_STRING = "BQJQ-c4AvpHZC130VQPQCjJsihgzTHOHstjZWokF7ZrUn2bNG7aveLhykusaxKHor0cg2ErxENHJAVT0RDUSDN8h1eHk7np8zoEyTLcX9V1ldsT0fp6apm4hZDtMbCY1-68Jcw-ZsKrVYsXiZpXKzyasQRY4eKTfkwzbNt3q8ea5Kl0mUJ39zLD_rtVkkEJIXFw4rWZBt_J0LCi86dU6wRv1ApfyfpOM_d06qGZpRchm6w-XrQp8MVBwcPt8x75mJ0jCdR5xv8IujPWGz-eGbOC0sVpVMqIVT3w-O1YEtG38okfLYKyBoD-BBkLSLHqf9RrTx-7vWQMAnLAWSwpbnrNhqQQ3twAAAAHt3wQlAA"
@@ -65,7 +62,7 @@ async def load_or_auth_youtube():
 
 async def start_youtube_auth(status_msg: Message):
     if not os.path.exists(CLIENT_SECRETS_FILE):
-        await status_msg.edit("❌ `client_secrets.json` not found.\n\nSend it as a document now!")
+        await status_msg.edit("❌ `client_secrets.json` not found.\n\nSend the JSON file again!")
         return
     flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, SCOPES)
     auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
@@ -145,25 +142,26 @@ async def process_queue():
         finally:
             video_queue.task_done()
 
-# ===================== BYPASS FOR CLIENT_SECRETS.JSON =====================
+# ===================== IMPROVED JSON HANDLER (more forgiving) =====================
 @app.on_message(filters.document & filters.private)
 async def handle_client_secrets(client, message: Message):
     if message.from_user.id != BOT_OWNER_ID:
         return
-    if message.document.file_name == "client_secrets.json":
+    
+    filename = message.document.file_name or ""
+    if filename.lower().endswith(".json") and ("client" in filename.lower() or "secret" in filename.lower()):
         file_path = f"{DATA_DIR}/client_secrets.json"
         await message.download(file_path)
         await message.reply("✅ `client_secrets.json` saved automatically!\n\nNow send `/youtube_auth`")
     else:
-        await message.reply("📄 I only accept `client_secrets.json` for YouTube setup.")
+        await message.reply(f"📄 Received file: `{filename}`\n\nI was expecting a file containing **client_secrets.json**\nPlease send the correct Google OAuth JSON file.")
 
-# ===================== COMMANDS =====================
-@app.on_message(filters.video & filters.private)
-async def handle_video(client: Client, message: Message):
+# ===================== DEBUG COMMANDS =====================
+@app.on_message(filters.command("start"))
+async def start_command(client, message: Message):
     if message.from_user.id != BOT_OWNER_ID:
         return
-    status_msg = await message.reply("**Queued!** Waiting in line...")
-    await video_queue.put({"msg": message, "status_msg": status_msg})
+    await message.reply("✅ **Bot is alive and ready!**\n\nSend your client_secrets.json file or use /youtube_auth")
 
 @app.on_message(filters.command("queue"))
 async def show_queue(client, message):
@@ -192,7 +190,7 @@ async def main():
     await app.start()
     await load_or_auth_youtube()
     asyncio.create_task(process_queue())
-    print("🚀 Userbot started with NEW credentials + peer fix!")
+    print("🚀 Userbot started with IMPROVED JSON handler!")
     await idle()
 
 if __name__ == "__main__":
